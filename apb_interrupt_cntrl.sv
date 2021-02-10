@@ -23,7 +23,8 @@ module apb_interrupt_cntrl
 #(
   parameter PER_ID_WIDTH  = 5,
   parameter EVT_ID_WIDTH  = 8,
-  parameter ENA_SEC_IRQ   = 1
+  parameter ENA_SEC_IRQ   = 1,
+  parameter FIFO_PIN = 26
 )
 (
   // clock and reset
@@ -43,6 +44,7 @@ module apb_interrupt_cntrl
   input  logic           core_irq_ack_i,
   output logic           core_irq_sec_o,
   input  logic [4:0]     core_irq_id_i,
+  output logic [31:0]    irq_o,
 
   input  logic           core_secure_mode_i,
   output logic           core_clock_en_o,
@@ -87,15 +89,15 @@ module apb_interrupt_cntrl
   assign core_clock_en_o = 1'b1;
   assign fetch_en_o      = 1'b1;
 
-  assign s_events = {events_i[31:27],s_event_fifo_valid,events_i[25:0]};
+  assign s_events = {events_i[31:FIFO_PIN+1],s_event_fifo_valid,events_i[FIFO_PIN-1:0]};
 
   assign s_is_apb_write = apb_slave.psel & apb_slave.penable & apb_slave.pwrite;
   assign s_is_apb_read  = apb_slave.psel & apb_slave.penable & ~apb_slave.pwrite;
 
-  assign s_is_int_clr_fifo  = s_is_int_clr & apb_slave.psel & apb_slave.penable & (apb_slave.pwdata[26] == 1'b1);
-  assign s_is_int_fifo      = s_is_int     & apb_slave.psel & apb_slave.penable & (apb_slave.pwdata[26] == 1'b0);
+  assign s_is_int_clr_fifo  = s_is_int_clr & apb_slave.psel & apb_slave.penable & (apb_slave.pwdata[FIFO_PIN] == 1'b1);
+  assign s_is_int_fifo      = s_is_int     & apb_slave.psel & apb_slave.penable & (apb_slave.pwdata[FIFO_PIN] == 1'b0);
 
-  assign s_event_fifo_ready = (core_irq_ack_i & (core_irq_id_i == 5'd26)) | (s_is_apb_write & (s_is_int_clr_fifo | s_is_int_fifo));
+  assign s_event_fifo_ready = (core_irq_ack_i & (core_irq_id_i == FIFO_PIN)) | (s_is_apb_write & (s_is_int_clr_fifo | s_is_int_fifo));
 
   assign s_apb_addr     = apb_slave.paddr[5:2];
   assign s_is_mask      = s_apb_addr == `REG_MASK;
@@ -146,6 +148,7 @@ module apb_interrupt_cntrl
 
   always_comb begin : proc_id
     core_irq_id_o = '0;
+    irq_o = r_int;
     for(int i=0;i<32;i++)
     begin
       if (r_int[i] && r_mask[i])
